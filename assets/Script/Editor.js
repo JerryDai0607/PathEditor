@@ -70,7 +70,51 @@ cc.Class({
         previewLabel : {
             type:cc.Label,
             default:null
+        },
+
+        labelCurrentDSize : {
+            type : cc.Label,
+            default :null
+        },
+
+        editCurrentDsizeX : {
+            type : cc.EditBox,
+            default:null,
+        },
+
+        editCurrentDsizeY : {
+            type : cc.EditBox,
+            default:null,
+        },
+    },
+
+    showWarn : function(str){
+
+    },
+
+    setLocalStorage : function(){
+        let str = D_SIZE.x+":"+D_SIZE.y;
+        cc.sys.localStorage.setItem("FISHPATHEDITOR_DESIGNSIZE", str);
+    },
+
+    getLocalStorage : function(){
+        let str = cc.sys.localStorage.getItem("FISHPATHEDITOR_DESIGNSIZE");
+        cc.log("getLocalStorage:"+str);
+        if(str){
+            let strarr = str.split(":");
+            D_SIZE.x = Number(strarr[0]);
+            D_SIZE.y = Number(strarr[1]);
+        }else{
+            D_SIZE.x = 1136;
+            D_SIZE.y = 640;
+            this.setLocalStorage();
         }
+    },
+
+    showCurrentDesignSize : function(){
+        this.labelCurrentDSize.string = "当前设计分辨率:"+D_SIZE.x+"x"+D_SIZE.y;
+        this.editCurrentDsizeX.placeholder = ""+D_SIZE.x;
+        this.editCurrentDsizeY.placeholder = ""+D_SIZE.y;
     },
 
     onEnable: function () {
@@ -98,6 +142,8 @@ cc.Class({
     onLoad: function () {
         this.drawGameTable();
         this.showWorkingState();
+        this.getLocalStorage();
+        this.showCurrentDesignSize();
     },
 
     initParam: function () {
@@ -307,6 +353,9 @@ cc.Class({
             case "BTN_PREVIEW" :{
                 this.clickPreviewBtn();
             }break;
+            case "BTN_RESIZE" :{
+                this.clickResizeBtn();
+            }break;
         }
     },
 
@@ -318,6 +367,45 @@ cc.Class({
         if(C_STATE == EditState.PREVIEW){
             this.stopPreview();
         }
+    },
+
+    onEditDidBegan: function(editbox, customEventData) {
+        cc.log("onEditDidBegan");
+    },
+    
+    onEditDidEnded: function(editbox, customEventData) {
+        cc.log("onEditDidEnded");
+    },
+   
+    onTextChanged: function(text, editbox, customEventData) {
+        cc.log("onTextChanged"+text);
+    },
+
+    clickResizeBtn : function(){
+        let ix = this.editCurrentDsizeX.string;
+        let iy = this.editCurrentDsizeY.string;
+        cc.log("-clickResizeBtnx:"+this.editCurrentDsizeX.string);
+        cc.log("-clickResizeBtny:"+this.editCurrentDsizeY.string);
+        
+        if(ix =="" || iy ==""){
+            this.showWarn("数字不能为空");
+            return;
+        }
+
+        if(Number(ix)==0 || Number(iy) ==0){
+            this.showWarn("数字不能为0");
+            return;
+        }
+
+        if(Number(ix)==D_SIZE.x && Number(iy) ==D_SIZE.y){
+            return;
+        }
+
+        D_SIZE.x = Number(ix);
+        D_SIZE.y = Number(iy);
+        this.setLocalStorage();
+        this.showCurrentDesignSize();
+
     },
 
 });
