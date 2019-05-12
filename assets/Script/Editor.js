@@ -1,5 +1,6 @@
 var tBezier = require("Bezier");
 var D_SIZE = cc.v2(1136, 640);
+var D_SCALE = 100;
 var EditState = {//工作状态
     NONE: 0,
     ADDPOINT: 1,
@@ -10,8 +11,8 @@ var EditState = {//工作状态
 };
 var STATE_CH = ["空闲中", "添加点", "删除点", "移动点", "整体移","预览中"];//当前工作状态的中文
 window.C_STATE = EditState.NONE;
-window.C_POINT_ARR = [];
-window.R_POINT_ARR = [];
+window.C_POINT_ARR = [];//存放所有点的数组
+window.R_POINT_ARR = [];//存放切割贝塞尔后的点的最终数组
 
 window.EventNotice = {
     POINT_REMOVE: "POINT_REMOVE",
@@ -86,6 +87,11 @@ cc.Class({
             type : cc.EditBox,
             default:null,
         },
+
+        labelCurrentScale :{
+            type : cc.Label,
+            default :null,
+        },
     },
 
     showWarn : function(str){
@@ -140,10 +146,11 @@ cc.Class({
     },
 
     onLoad: function () {
-        this.drawGameTable();
-        this.showWorkingState();
         this.getLocalStorage();
+        this.refreshCurrentTable();
+        this.showWorkingState();
         this.showCurrentDesignSize();
+        this.showCurrentScale();
     },
 
     initParam: function () {
@@ -213,8 +220,11 @@ cc.Class({
     },
 
     drawGameTable: function () {
+        //this.drawTableNode1.scale = (D_SCALE*0.01);
         var ctx1 = this.drawTableNode1.getComponent(cc.Graphics);
-        ctx1.rect(-D_SIZE.x / 2, -D_SIZE.y / 2, D_SIZE.x, D_SIZE.y);
+        ctx1.clear();
+        //ctx1.rect(-D_SIZE.x*0.5, -D_SIZE.y *0.5, D_SIZE.x, D_SIZE.y);
+        ctx1.rect(-D_SIZE.x*0.5*(D_SCALE/100), -D_SIZE.y *0.5*(D_SCALE/100), D_SIZE.x*(D_SCALE/100), D_SIZE.y*(D_SCALE/100));
         ctx1.stroke();
     },
 
@@ -273,7 +283,7 @@ cc.Class({
                 cc.log("1createPoint:" + pos);
                 let pos2 = this.pointLayer.convertToNodeSpace(pos);
                 cc.log("2createPoint:" + pos2);
-
+                
                 this.createPoint(pos2);
             } break;
         }
@@ -314,7 +324,7 @@ cc.Class({
         this.warmTip.active = tag;
     },
 
-    testPro: function () {
+    buildResult: function () {
         R_POINT_ARR = [];
         tBezier.BuildBezierByPointArr(C_POINT_ARR,R_POINT_ARR);
     },
@@ -355,6 +365,18 @@ cc.Class({
             }break;
             case "BTN_RESIZE" :{
                 this.clickResizeBtn();
+            }break;
+            case "BTN_ADD":{
+                this.changeWorkSpaceScale(10);
+            }break;
+            case "BTN_REM":{
+                this.changeWorkSpaceScale(-10);
+            }break;
+            case "BTN_CLEAR":{
+                this.clearPoint();
+            }break;
+            case "BTN_BUILD":{
+                this.buildResult();
             }break;
         }
     },
@@ -401,11 +423,54 @@ cc.Class({
             return;
         }
 
+        if(Number(ix)>=1920 || Number(iy)>=1080){//todo 还有缩放系数
+            this.showWarn("调节缩放按钮，以获得合适的区域");
+        }
+
         D_SIZE.x = Number(ix);
         D_SIZE.y = Number(iy);
         this.setLocalStorage();
         this.showCurrentDesignSize();
+        this.refreshCurrentTable();
+    },
 
+    refreshCurrentTable : function(){
+        this.drawGameTable();
+        this.setPointLayer();
+    },
+
+    setPointLayer : function(){
+        this.pointLayer.width =  D_SIZE.x;
+        this.pointLayer.height =  D_SIZE.y;
+        this.pointLayer.x = -D_SIZE.x*0.5*(D_SCALE*0.01);
+        this.pointLayer.y = -D_SIZE.y*0.5*(D_SCALE*0.01);
+        this.pointLayer.scale = (D_SCALE*0.01);
+    },
+
+    showCurrentScale : function(){
+        this.labelCurrentScale.string = "工作区缩放比例"+Math.floor(D_SCALE)+"%";
+    },
+
+    changeWorkSpaceScale : function(tag){
+        let cscale = D_SCALE+tag;
+        if(cscale>200 || cscale<=0){
+            this.showWarn("超过最大缩放比例");
+            return
+        }
+        D_SCALE = cscale;
+        this.showCurrentScale();
+        this.refreshCurrentTable();
+
+    },
+
+    clearPoint : function(){
+        for(var i =0;i<C_POINT_ARR.length;++i){
+            C_POINT_ARR[i].destroy();
+        }
+        this.dropRealLine();
+        this.dropLawLine();
+        C_POINT_ARR = [];
+        R_POINT_ARR = [];
     },
 
 });
