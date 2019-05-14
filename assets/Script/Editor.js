@@ -7,11 +7,18 @@ var EditState = {//工作状态
     REMOVEPOINT: 2,
     MOVEPOINT: 3,
     MOVEALL: 4,
-    PREVIEW :5,
+    PREVIEW: 5,
 };
-var STATE_CH = ["空闲中", "添加点", "删除点", "移动点", "整体移","预览中"];//当前工作状态的中文
+
+var LineMode = {
+    Normal: 0,//画线模式，正常模式
+    Soft: 1//画线模式，顺滑模式
+};
+var STATE_CH = ["空闲中", "添加点", "删除点", "移动点", "整体移", "预览中"];//当前工作状态的中文
 window.C_STATE = EditState.NONE;
-window.C_POINT_ARR = [];//存放所有点的数组
+window.C_MODE = LineMode.Soft;//画线的模式
+window.C_POINT_ARR = [];//存放所有点对象的数组
+window.C_POINT_ARR_TEMP = [];//根据点生成顺滑的点坐标
 window.R_POINT_ARR = [];//存放切割贝塞尔后的点的最终数组
 
 window.EventNotice = {
@@ -68,59 +75,82 @@ cc.Class({
             default: null,
         },
 
-        previewLabel : {
-            type:cc.Label,
-            default:null
+        previewLabel: {
+            type: cc.Label,
+            default: null
         },
 
-        labelCurrentDSize : {
-            type : cc.Label,
+        labelCurrentDSize: {
+            type: cc.Label,
+            default: null
+        },
+
+        editCurrentDsizeX: {
+            type: cc.EditBox,
+            default: null,
+        },
+
+        editCurrentDsizeY: {
+            type: cc.EditBox,
+            default: null,
+        },
+
+        labelCurrentScale: {
+            type: cc.Label,
+            default: null,
+        },
+
+        modeText :{
+            type: cc.Label,
+            default: null,
+        },
+
+        warnLabel : {
+            type: cc.Node,
             default :null
         },
 
-        editCurrentDsizeX : {
-            type : cc.EditBox,
-            default:null,
+        warnContent : {
+            type: cc.Label,
+            default : null
         },
-
-        editCurrentDsizeY : {
-            type : cc.EditBox,
-            default:null,
-        },
-
-        labelCurrentScale :{
-            type : cc.Label,
-            default :null,
-        },
-    },
-
-    showWarn : function(str){
 
     },
 
-    setLocalStorage : function(){
-        let str = D_SIZE.x+":"+D_SIZE.y;
+    showWarn: function (str) {
+        if(this.warnLabel.active == false){
+            this.warnLabel.active = true;
+        }
+        this.warnContent.string = str;
+    },
+
+    closeWarn : function(){
+        this.warnLabel.active = false;
+    },
+
+    setLocalStorage: function () {
+        let str = D_SIZE.x + ":" + D_SIZE.y;
         cc.sys.localStorage.setItem("FISHPATHEDITOR_DESIGNSIZE", str);
     },
 
-    getLocalStorage : function(){
+    getLocalStorage: function () {
         let str = cc.sys.localStorage.getItem("FISHPATHEDITOR_DESIGNSIZE");
-        cc.log("getLocalStorage:"+str);
-        if(str){
+        cc.log("getLocalStorage:" + str);
+        if (str) {
             let strarr = str.split(":");
             D_SIZE.x = Number(strarr[0]);
             D_SIZE.y = Number(strarr[1]);
-        }else{
+        } else {
             D_SIZE.x = 1136;
             D_SIZE.y = 640;
             this.setLocalStorage();
         }
     },
 
-    showCurrentDesignSize : function(){
-        this.labelCurrentDSize.string = "当前设计分辨率:"+D_SIZE.x+"x"+D_SIZE.y;
-        this.editCurrentDsizeX.placeholder = ""+D_SIZE.x;
-        this.editCurrentDsizeY.placeholder = ""+D_SIZE.y;
+    showCurrentDesignSize: function () {
+        this.labelCurrentDSize.string = "当前设计分辨率:" + D_SIZE.x + "x" + D_SIZE.y;
+        this.editCurrentDsizeX.placeholder = "" + D_SIZE.x;
+        this.editCurrentDsizeY.placeholder = "" + D_SIZE.y;
     },
 
     onEnable: function () {
@@ -156,6 +186,7 @@ cc.Class({
     initParam: function () {
         window.C_STATE = EditState.NONE;
         window.C_POINT_ARR = [];
+        C_POINT_ARR_TEMP =[];
     },
 
     createPoint: function (pos) {
@@ -164,8 +195,40 @@ cc.Class({
         point.setPosition(pos);
         C_POINT_ARR.push(point);
         cc.log("C_POINT_ARR.length" + C_POINT_ARR.length);
-        this.drawLaw();
-        this.drawBezier();
+        if (C_MODE == LineMode.Normal) {
+            this.drawLaw();
+            this.drawBezier();
+        } else {
+            this.drawSoftBezier();
+        }
+
+    },
+
+    drawSoftBezier: function () {
+        if (C_POINT_ARR.length >= 3) {
+            this.dropRealLine();
+            C_POINT_ARR_TEMP = [];
+            for (var j = 0; j < C_POINT_ARR.length; ++j) {
+                if (j == 0 || j == (C_POINT_ARR.length - 1)) {
+                    C_POINT_ARR_TEMP.push(cc.v2(C_POINT_ARR[j].x, C_POINT_ARR[j].y));
+                } else {
+                    C_POINT_ARR_TEMP.push(cc.v2(C_POINT_ARR[j].x, C_POINT_ARR[j].y));
+                    let temp = cc.v2((C_POINT_ARR[j].x + C_POINT_ARR[j + 1].x) * 0.5, (C_POINT_ARR[j].y + C_POINT_ARR[j + 1].y) * 0.5);
+                    C_POINT_ARR_TEMP.push(temp);
+                }
+            }
+
+            let pointlength = C_POINT_ARR_TEMP.length;//总的点数
+            let linenumber = Math.floor((pointlength - 3) / 2) + 1;//要画几次
+            for (let i = 0; i < linenumber; ++i) {
+                let p0 = C_POINT_ARR_TEMP[i * 2];
+                let p1 = C_POINT_ARR_TEMP[i * 2 + 1];
+                let p2 = C_POINT_ARR_TEMP[i * 2 + 2];
+                this.drawRealLine(p0, p1, p2);
+            }
+        } else {
+            this.dropRealLine();
+        }
     },
 
     drawLaw: function () {
@@ -224,7 +287,7 @@ cc.Class({
         var ctx1 = this.drawTableNode1.getComponent(cc.Graphics);
         ctx1.clear();
         //ctx1.rect(-D_SIZE.x*0.5, -D_SIZE.y *0.5, D_SIZE.x, D_SIZE.y);
-        ctx1.rect(-D_SIZE.x*0.5*(D_SCALE/100), -D_SIZE.y *0.5*(D_SCALE/100), D_SIZE.x*(D_SCALE/100), D_SIZE.y*(D_SCALE/100));
+        ctx1.rect(-D_SIZE.x * 0.5 * (D_SCALE / 100), -D_SIZE.y * 0.5 * (D_SCALE / 100), D_SIZE.x * (D_SCALE / 100), D_SIZE.y * (D_SCALE / 100));
         ctx1.stroke();
     },
 
@@ -283,7 +346,7 @@ cc.Class({
                 cc.log("1createPoint:" + pos);
                 let pos2 = this.pointLayer.convertToNodeSpace(pos);
                 cc.log("2createPoint:" + pos2);
-                
+
                 this.createPoint(pos2);
             } break;
         }
@@ -311,13 +374,21 @@ cc.Class({
     },
 
     pointRemove: function () {
-        this.drawLaw();
-        this.drawBezier();
+        if (C_MODE == LineMode.Normal) {
+            this.drawLaw();
+            this.drawBezier();
+        } else {
+            this.drawSoftBezier();
+        }
     },
 
     pointMove: function () {
-        this.drawLaw();
-        this.drawBezier();
+        if (C_MODE == LineMode.Normal) {
+            this.drawLaw();
+            this.drawBezier();
+        } else {
+            this.drawSoftBezier();
+        }
     },
 
     showWarmTip: function (tag) {
@@ -326,28 +397,32 @@ cc.Class({
 
     buildResult: function () {
         R_POINT_ARR = [];
-        tBezier.BuildBezierByPointArr(C_POINT_ARR,R_POINT_ARR);
+        if (C_MODE == LineMode.Normal) {
+            tBezier.BuildBezierByPointArr(C_POINT_ARR, R_POINT_ARR);
+        } else {
+            tBezier.BuildBezierByPointArr(C_POINT_ARR_TEMP, R_POINT_ARR);
+        }
     },
 
     startPreview: function () {
-        if(R_POINT_ARR.length ==0){
-            cc.warn("没有生成数据");
+        if (R_POINT_ARR.length == 0) {
+            this.showWarn("没有生成数据");
             return;
         }
         this.changeWorkingState(EditState.PREVIEW);
         this.previewLabel.string = "结束预览";
         let fish = cc.instantiate(this.fish);
         fish.getComponent("Fish").setPath();
-        this.pointLayer.addChild(fish,10,"PreviewFish");
+        this.pointLayer.addChild(fish, 10, "PreviewFish");
     },
 
-    stopPreview : function(){
+    stopPreview: function () {
         cc.log("stopPreview");
         this.finishPreview();
-        let fish =this.pointLayer.getChildByName("PreviewFish");
-        if(fish){
+        let fish = this.pointLayer.getChildByName("PreviewFish");
+        if (fish) {
             fish.destroy();
-        } 
+        }
     },
 
     finishPreview: function () {
@@ -357,73 +432,92 @@ cc.Class({
     },
 
 
-    onBtnClickCallBack : function(event){
+    onBtnClickCallBack: function (event) {
         let node = event.target;
-        switch(node.name){
-            case "BTN_PREVIEW" :{
-                this.clickPreviewBtn();
-            }break;
-            case "BTN_RESIZE" :{
-                this.clickResizeBtn();
-            }break;
-            case "BTN_ADD":{
-                this.changeWorkSpaceScale(10);
-            }break;
-            case "BTN_REM":{
-                this.changeWorkSpaceScale(-10);
-            }break;
-            case "BTN_CLEAR":{
-                this.clearPoint();
-            }break;
-            case "BTN_BUILD":{
-                this.buildResult();
-            }break;
+        if (node.name == "BTN_PREVIEW") {
+            this.clickPreviewBtn();
+        } else {
+            if (C_STATE != EditState.NONE) {
+                return;
+            }
+            switch (node.name) {
+                case "BTN_RESIZE": {
+                    this.clickResizeBtn();
+                } break;
+                case "BTN_ADD": {
+                    this.changeWorkSpaceScale(10);
+                } break;
+                case "BTN_REM": {
+                    this.changeWorkSpaceScale(-10);
+                } break;
+                case "BTN_CLEAR": {
+                    this.clearPoint();
+                } break;
+                case "BTN_BUILD": {
+                    this.buildResult();
+                } break;
+                case "BTN_MODE" :{
+                    this.clickModeBtn();
+                }break;
+            }
+        }
+
+    },
+
+    clickModeBtn: function () {
+        this.clearPoint();
+        if (C_MODE == LineMode.Normal) {
+            C_MODE = LineMode.Soft;
+            this.modeText.string = "顺滑曲线模式";
+        } else {
+            C_MODE = LineMode.Normal;
+            this.modeText.string = "普通曲线模式";
         }
     },
 
-    clickPreviewBtn : function(){
+    clickPreviewBtn: function () {
         if (C_STATE == EditState.NONE) {
             this.startPreview();
             return;
         }
-        if(C_STATE == EditState.PREVIEW){
+        if (C_STATE == EditState.PREVIEW) {
             this.stopPreview();
         }
     },
 
-    onEditDidBegan: function(editbox, customEventData) {
+    onEditDidBegan: function (editbox, customEventData) {
         cc.log("onEditDidBegan");
     },
-    
-    onEditDidEnded: function(editbox, customEventData) {
+
+    onEditDidEnded: function (editbox, customEventData) {
         cc.log("onEditDidEnded");
     },
-   
-    onTextChanged: function(text, editbox, customEventData) {
-        cc.log("onTextChanged"+text);
+
+    onTextChanged: function (text, editbox, customEventData) {
+        cc.log("onTextChanged" + text);
     },
 
-    clickResizeBtn : function(){
+    clickResizeBtn: function () {
         let ix = this.editCurrentDsizeX.string;
         let iy = this.editCurrentDsizeY.string;
-        cc.log("-clickResizeBtnx:"+this.editCurrentDsizeX.string);
-        cc.log("-clickResizeBtny:"+this.editCurrentDsizeY.string);
-        
-        if(ix =="" || iy ==""){
+        cc.log("-clickResizeBtnx:" + this.editCurrentDsizeX.string);
+        cc.log("-clickResizeBtny:" + this.editCurrentDsizeY.string);
+
+        if (ix == "" || iy == "") {
             this.showWarn("数字不能为空");
             return;
         }
 
-        if(Number(ix)==0 || Number(iy) ==0){
+        if (Number(ix) == 0 || Number(iy) == 0) {
             this.showWarn("数字不能为0");
             return;
         }
 
-        if(Number(ix)==D_SIZE.x && Number(iy) ==D_SIZE.y){
+        if (Number(ix) == D_SIZE.x && Number(iy) == D_SIZE.y) {
             return;
         }
 
-        if(Number(ix)>=1920 || Number(iy)>=1080){//todo 还有缩放系数
+        if (Number(ix) >= 1920 || Number(iy) >= 1080) {//todo 还有缩放系数
             this.showWarn("调节缩放按钮，以获得合适的区域");
         }
 
@@ -434,26 +528,26 @@ cc.Class({
         this.refreshCurrentTable();
     },
 
-    refreshCurrentTable : function(){
+    refreshCurrentTable: function () {
         this.drawGameTable();
         this.setPointLayer();
     },
 
-    setPointLayer : function(){
-        this.pointLayer.width =  D_SIZE.x;
-        this.pointLayer.height =  D_SIZE.y;
-        this.pointLayer.x = -D_SIZE.x*0.5*(D_SCALE*0.01);
-        this.pointLayer.y = -D_SIZE.y*0.5*(D_SCALE*0.01);
-        this.pointLayer.scale = (D_SCALE*0.01);
+    setPointLayer: function () {
+        this.pointLayer.width = D_SIZE.x;
+        this.pointLayer.height = D_SIZE.y;
+        this.pointLayer.x = -D_SIZE.x * 0.5 * (D_SCALE * 0.01);
+        this.pointLayer.y = -D_SIZE.y * 0.5 * (D_SCALE * 0.01);
+        this.pointLayer.scale = (D_SCALE * 0.01);
     },
 
-    showCurrentScale : function(){
-        this.labelCurrentScale.string = "工作区缩放比例"+Math.floor(D_SCALE)+"%";
+    showCurrentScale: function () {
+        this.labelCurrentScale.string = "工作区缩放比例" + Math.floor(D_SCALE) + "%";
     },
 
-    changeWorkSpaceScale : function(tag){
-        let cscale = D_SCALE+tag;
-        if(cscale>200 || cscale<=0){
+    changeWorkSpaceScale: function (tag) {
+        let cscale = D_SCALE + tag;
+        if (cscale > 200 || cscale <= 0) {
             this.showWarn("超过最大缩放比例");
             return
         }
@@ -463,13 +557,14 @@ cc.Class({
 
     },
 
-    clearPoint : function(){
-        for(var i =0;i<C_POINT_ARR.length;++i){
+    clearPoint: function () {
+        for (var i = 0; i < C_POINT_ARR.length; ++i) {
             C_POINT_ARR[i].destroy();
         }
         this.dropRealLine();
         this.dropLawLine();
         C_POINT_ARR = [];
+        C_POINT_ARR_TEMP =[];
         R_POINT_ARR = [];
     },
 
