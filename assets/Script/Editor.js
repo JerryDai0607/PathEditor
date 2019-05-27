@@ -459,6 +459,9 @@ cc.Class({
                 case "BTN_MODE" :{
                     this.clickModeBtn();
                 }break;
+                case "BTN_DOWN" : {
+                    this.downJsonFile();
+                }break;
             }
         }
 
@@ -566,6 +569,21 @@ cc.Class({
         C_POINT_ARR = [];
         C_POINT_ARR_TEMP =[];
         R_POINT_ARR = [];
+    },
+
+    downJsonFile : function(){
+        cc.log("downJsonFile");
+        // var data = {
+        //     "name":"zs"
+        // };
+        if(R_POINT_ARR.length == 0){
+            this.showWarn("尚未生成数据");
+            return;
+        }
+        var blob = new Blob([JSON.stringify(R_POINT_ARR)]);
+        saveAs(blob,"FishPathPointArry.json");
+    
+        
     },
 
 });
